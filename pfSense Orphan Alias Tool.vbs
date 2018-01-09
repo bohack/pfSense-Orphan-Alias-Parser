@@ -1,5 +1,5 @@
 ' Bohack
-' 01/08/18
+' 01/09/18
 ' Firewall alias parser to find orphaned aliases.
 ' Before deleting any aliases grep the config to be 100% sure
 
@@ -7,6 +7,8 @@ Option Explicit
 Dim objXMLDoc, Item, aryList
 Dim objAliasMasterList, Alias, ObjAliasConfigured
 Dim aryXMLList, XMLPath, objAliasCollection
+Dim objFSO, objFile, colConfigFile, strLine, Count
+Const ForReading = 1
 
 If WScript.Arguments.Count < 1 Then
    Wscript.Echo "Usage:" & Wscript.ScriptName & " {name of the pfsense XML files}"
@@ -49,14 +51,31 @@ For Each Alias in ObjAliasCollection
 Next
 
 'Print out any orphaned aliases
+Set objFSO = CreateObject("Scripting.FileSystemObject")
+Set objFile = objFSO.OpenTextFile(Wscript.Arguments(0), ForReading)
+colConfigFile = Split(objFile.ReadAll, vbLf)
+
 Wscript.Echo "List of Orphaned Aliases"
 Wscript.Echo "-----------------------------"
 Set ObjAliasConfigured=objXMLDoc.selectNodes ("//pfsense/aliases/alias/name")
 For Each Alias in ObjAliasConfigured
-  If not objAliasMasterList.Exists(Alias.Text) Then
-    Wscript.Echo Alias.Text
+  If Not objAliasMasterList.Exists(Alias.Text) Then
+    Count = 0
+    For Each strLine in colConfigFile
+      Count = Count + 1
+      If Instr(strLine, Alias.Text) > 0 Then
+        If Instr(strLine,"<name>") < 1 Then
+          Wscript.Echo Alias.Text & " - was found in config at line " & Count & "," & Instr(strLine, Alias.Text)
+          Wscript.Echo String(len(Alias.Text)+3," ") & Mid(strLine,Instr(strLine,"<"),Len(strLine))
+        Else
+          Wscript.Echo Alias.Text & " - was NOT found anywhere in the config outside of the alias tags"
+        End If
+      End If
+    Next
   End If
 Next
 
+Set objFile = Nothing
+Set objFSO = Nothing
 Set ObjAliasConfigured = Nothing
 Set ObjAliasCollection = Nothing
